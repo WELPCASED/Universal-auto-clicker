@@ -1,0 +1,135 @@
+-- Wait for the Player's GUI to load
+local playerGui = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+
+-- Create a ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AutoClickerGUI"
+screenGui.ResetOnSpawn = false -- GUI persists after respawn
+screenGui.Parent = playerGui
+
+-- Create a Toggle Button with 20% smaller size
+local button = Instance.new("TextButton")
+button.Name = "ToggleButton"
+button.Parent = screenGui
+button.Size = UDim2.new(0, 160, 0, 40) -- Width: 160px, Height: 40px (20% smaller)
+button.Position = UDim2.new(0.5, -80, 0.5, -20) -- Centered based on new size
+button.Text = "Auto Clicker: OFF"
+button.TextScaled = true
+button.BackgroundColor3 = Color3.fromRGB(255, 100, 100) -- Red for OFF
+button.BorderSizePixel = 2
+
+-- Variables
+local isAutoClickerOn = false
+local lastClickTime = tick()
+local dragging = false
+local dragStartPos = nil
+
+-- Get VirtualInputManager (used for sending real touch/click events)
+local virtualInputManager = game:GetService("VirtualInputManager")
+
+-- Function to simulate a real click/touch on the GUI button
+local function simulateButtonClick()
+    -- Get the button's absolute position and size
+    local buttonAbsolutePosition = button.AbsolutePosition
+    local buttonAbsoluteSize = button.AbsoluteSize
+
+    -- Calculate a random position within the button's bounds
+    local randomPosition = Vector2.new(
+        math.random(buttonAbsolutePosition.X, buttonAbsolutePosition.X + buttonAbsoluteSize.X),
+        math.random(buttonAbsolutePosition.Y, buttonAbsolutePosition.Y + buttonAbsoluteSize.Y)
+    )
+
+    -- Simulate a click/touch event at the random position within the button
+    virtualInputManager:SendMouseButtonEvent(
+        randomPosition.X, randomPosition.Y, -- Position
+        0, -- Mouse button (0 = left click)
+        true, -- Press
+        button, -- Target instance
+        0 -- Delay
+    )
+    virtualInputManager:SendMouseButtonEvent(
+        randomPosition.X, randomPosition.Y, -- Position
+        0, -- Mouse button (0 = left click)
+        false, -- Release
+        button, -- Target instance
+        0 -- Delay
+    )
+end
+
+-- Start Auto Clicker Loop with wait() for yielding
+local function startAutoClicker()
+    while isAutoClickerOn do
+        simulateButtonClick()
+        wait(0.1) -- Wait for 0.1 seconds between clicks (this is the delay)
+    end
+end
+
+-- Toggle the Auto Clicker
+local function toggleAutoClicker()
+    isAutoClickerOn = not isAutoClickerOn
+    if isAutoClickerOn then
+        button.Text = "Auto Clicker: ON"
+        button.BackgroundColor3 = Color3.fromRGB(100, 255, 100) -- Green for ON
+
+        -- Start the auto-clicker loop in a separate thread
+        spawn(function()
+            startAutoClicker()
+        end)
+    else
+        button.Text = "Auto Clicker: OFF"
+        button.BackgroundColor3 = Color3.fromRGB(255, 100, 100) -- Red for OFF
+
+        -- Stop the auto-clicker loop by toggling the flag
+        isAutoClickerOn = false
+    end
+end
+
+-- Function to start dragging the button
+local function startDrag(input)
+    dragging = true
+    dragStartPos = input.Position
+end
+
+-- Function to drag the button smoothly without tweening
+local function drag(input)
+    if dragging then
+        -- Calculate the offset and update button position based on mouse/touch movement
+        local delta = input.Position - dragStartPos
+        local targetPos = UDim2.new(0, button.Position.X.Offset + delta.X, 0, button.Position.Y.Offset + delta.Y)
+        
+        -- Set the button's position directly
+        button.Position = targetPos
+
+        -- Update the drag start position to the current input position
+        dragStartPos = input.Position
+    end
+end
+
+-- Function to stop dragging the button
+local function stopDrag()
+    dragging = false
+end
+
+-- Connect button click to toggle function
+button.MouseButton1Click:Connect(toggleAutoClicker)
+
+-- Make the button draggable using Mouse
+button.InputBegan:Connect(function(input, gameProcessed)
+    if not gameProcessed then
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            startDrag(input)
+        end
+    end
+end)
+
+button.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        drag(input)
+    end
+end)
+
+button.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        stopDrag()
+    end
+end)
